@@ -1,4 +1,4 @@
-#define DEVICE_ID "E04"
+#define DEVICE_ID "E01"
 
 #include <ESP8266WiFi.h>
 #include <TinyGPS++.h>
@@ -65,9 +65,9 @@ void loop() {
           Serial.println("ID not found. Creating new entry...");
           firebase.setString(idPath, DEVICE_ID);
         }
+        firebase.setFloat(basePath + "/position/lat", round(gps.location.lat() * 1000000.0) / 1000000.0);
+        firebase.setFloat(basePath + "/position/lng", round(gps.location.lng() * 1000000.0) / 1000000.0);
 
-        firebase.setFloat(basePath + "/position/lat", gps.location.lat());
-        firebase.setFloat(basePath + "/position/lng", gps.location.lng());
         firebase.setString(basePath + "/timestamp", timestamp);
 
         Serial.println("Data pushed to Firebase");
