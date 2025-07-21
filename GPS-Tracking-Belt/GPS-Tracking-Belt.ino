@@ -1,4 +1,4 @@
-#define DEVICE_ID "E01"
+#define DEVICE_ID "E04"
 
 #include <ESP8266WiFi.h>
 #include <TinyGPS++.h>
@@ -26,72 +26,59 @@ void setup() {
 void loop() {
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
+  }
 
-    if (gps.location.isValid()) {
-      unsigned long now = millis();
-      if (now - lastSent >= sendInterval) {
-        lastSent = now;
+  if (gps.location.isValid() && gps.location.isUpdated()) {
+    unsigned long now = millis();
+    if (now - lastSent >= sendInterval) {
+      lastSent = now;
 
-        String latitude = String(gps.location.lat(), 6);
-        String longitude = String(gps.location.lng(), 6);
+      String latitude = String(gps.location.lat(), 6);
+      String longitude = String(gps.location.lng(), 6);
 
-        // String timestamp = String(gps.date.year()) + "/" +
-        //                    String(gps.date.month()) + "/" +
-        //                    String(gps.date.day()) + " " +
-        //                    String(gps.time.hour()) + ":" +
-        //                    String(gps.time.minute()) + ":" +
-        //                    String(gps.time.second());
+      char timestamp[30];
+      sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02d.000Z",
+        gps.date.year(),
+        gps.date.month(),
+        gps.date.day(),
+        gps.time.hour(),
+        gps.time.minute(),
+        gps.time.second());
 
-        char timestamp[30];
-        sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02d.000Z",
-          gps.date.year(),
-          gps.date.month(),
-          gps.date.day(),
-          gps.time.hour(),
-          gps.time.minute(),
-          gps.time.second());
+      Serial.println("------------------------------------------------------");
+      Serial.print("Latitude: "); Serial.println(latitude);
+      Serial.print("Longitude: "); Serial.println(longitude);
+      Serial.print("Timestamp: "); Serial.println(timestamp);
+      Serial.println("------------------------------------------------------");
 
-        Serial.println("------------------------------------------------------");
-        Serial.print("Latitude: ");
-        Serial.println(latitude);
-        Serial.print("Longitude: ");
-        Serial.println(longitude);
-        Serial.print("Timestamp: ");
-        Serial.println(timestamp);
-        Serial.println("------------------------------------------------------");
+      if (WiFi.status() == WL_CONNECTED) {
+        String idPath = "/elephant_locations/" + String(DEVICE_ID) + "/id";
+        String basePath = "/elephant_locations/" + String(DEVICE_ID);
 
-        if (WiFi.status() == WL_CONNECTED) {
-          String idPath = "/elephant_locations/" + String(DEVICE_ID) + "/id";
-          String basePath = "/elephant_locations/" + String(DEVICE_ID);
+        String result = firebase.getString(idPath);
+        Serial.print("Checking path: "); Serial.println(idPath);
+        Serial.print("Result: "); Serial.println(result);
 
-          String result = firebase.getString(idPath);
-          Serial.print("Checking path: ");
-          Serial.println(idPath);
-          Serial.print("Result: ");
-          Serial.println(result);
-
-          if (result == DEVICE_ID) {
-            Serial.println("ID exists. Updating...");
-          } else {
-            Serial.println("ID not found. Creating new entry...");
-            firebase.setString(idPath, DEVICE_ID);
-          }
-
-          firebase.setFloat(basePath + "/position/lat", latitude.toFloat());
-          firebase.setFloat(basePath + "/position/lng", longitude.toFloat());
-          firebase.setString(basePath + "/timestamp", timestamp);
-
-          Serial.println("Data pushed to Firebase");
+        if (result == DEVICE_ID) {
+          Serial.println("ID exists. Updating...");
         } else {
-          Serial.println("WiFi not connected. Reconnecting...");
-          Connect_WiFi();
+          Serial.println("ID not found. Creating new entry...");
+          firebase.setString(idPath, DEVICE_ID);
         }
+
+        firebase.setFloat(basePath + "/position/lat", gps.location.lat());
+        firebase.setFloat(basePath + "/position/lng", gps.location.lng());
+        firebase.setString(basePath + "/timestamp", timestamp);
+
+        Serial.println("Data pushed to Firebase");
+      } else {
+        Serial.println("WiFi not connected. Reconnecting...");
+        Connect_WiFi();
       }
     }
   }
-
-  delay(100);  // small delay to prevent busy loop
 }
+
 
 void Connect_WiFi() {
   Serial.println();
@@ -100,13 +87,18 @@ void Connect_WiFi() {
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("-------------------------------------------------------");
+    Serial.println("WiFi Not connected");
+    Serial.println("-------------------------------------------------------");
+    
+  }else{
+    Serial.println("-------------------------------------------------------");
+    Serial.println("WiFi connected");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.println("-------------------------------------------------------");
 
-  Serial.println();
-  Serial.println("WiFi connected");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  }
+  delay(3000);
 }
