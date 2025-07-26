@@ -4,11 +4,17 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 #include <ESP8266Firebase.h>
-#include <ESP8266WebServer.h>
+#include <WiFiUdp.h>
 
 #define WIFI_SSID "TCL20Y"
 #define WIFI_PASSWORD "F55BuIvV"
 #define FIREBASE_HOST "https://elephant-tracking-app-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+WiFiUDP udp;
+const unsigned int udpPort = 4210;
+const IPAddress broadcastIp(192, 168, 1, 255); 
+
+
 
 Firebase firebase(FIREBASE_HOST);
 TinyGPSPlus gps;
@@ -37,23 +43,14 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // HTTP Endpoint to get current device info
-  server.on("/info", []() {
-    String json = "{";
-    json += "\"id\": \"" + String(DEVICE_ID) + "\",";
-    json += "\"lat\": " + String(lastLat, 6) + ",";
-    json += "\"lng\": " + String(lastLng, 6) + ",";
-    json += "\"time\": \"" + lastTime + "\"";
-    json += "}";
-    server.send(200, "application/json", json);
-  });
+  udp.begin(udpPort);
+  Serial.println("UDP ready");
 
-  server.begin();
-  Serial.println("HTTP server started");
+  
 }
 
 void loop() {
-  server.handleClient(); // Handle HTTP requests
+  
 
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
@@ -83,6 +80,14 @@ void loop() {
       Serial.print("Longitude: "); Serial.println(lastLng, 6);
       Serial.print("Timestamp: "); Serial.println(lastTime);
       Serial.println("------------------------------------------------------");
+
+
+      String message = DEVICE_ID + "," + String(lastLat, 6) + "," + String(lastLng, 6);
+      
+      udp.beginPacket(broadcastIp, udpPort);
+      udp.write(message.c_str());
+      udp.endPacket();
+      delay(1000);
 
       if (WiFi.status() == WL_CONNECTED) {
         String idPath = "/elephant_locations/" + String(DEVICE_ID) + "/id";
@@ -130,5 +135,5 @@ void Connect_WiFi() {
     Serial.println(WiFi.localIP());
     Serial.println("-------------------------------------------------------");
   }
-  delay(3000);
+
 }
