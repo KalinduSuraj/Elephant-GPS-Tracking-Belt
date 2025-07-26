@@ -4,18 +4,23 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
 #include <ESP8266Firebase.h>
+#include <ESP8266WebServer.h>
 
 #define WIFI_SSID "TCL20Y"
 #define WIFI_PASSWORD "F55BuIvV"
-
 #define FIREBASE_HOST "https://elephant-tracking-app-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 Firebase firebase(FIREBASE_HOST);
 TinyGPSPlus gps;
 SoftwareSerial gpsSerial(D4, D3);  // RX, TX
+ESP8266WebServer server(80);       // HTTP server
 
 unsigned long lastSent = 0;
 const unsigned long sendInterval = 2000;  // milliseconds
+
+float lastLat = 0.0;
+float lastLng = 0.0;
+String lastTime;
 
 void setup() {
   Serial.begin(9600);
@@ -27,13 +32,29 @@ void setup() {
     Serial.print("- ");
     delay(500);
   }
-  Serial.println("WiFi connected");
+
+  Serial.println("\nWiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  // HTTP Endpoint to get current device info
+  server.on("/info", []() {
+    String json = "{";
+    json += "\"id\": \"" + String(DEVICE_ID) + "\",";
+    json += "\"lat\": " + String(lastLat, 6) + ",";
+    json += "\"lng\": " + String(lastLng, 6) + ",";
+    json += "\"time\": \"" + lastTime + "\"";
+    json += "}";
+    server.send(200, "application/json", json);
+  });
+
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
 void loop() {
-  // Serial.println("-------------------------------------------------------- ");
+  server.handleClient(); // Handle HTTP requests
+
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
   }
@@ -43,8 +64,8 @@ void loop() {
     if (now - lastSent >= sendInterval) {
       lastSent = now;
 
-      String latitude = String(gps.location.lat(), 6);
-      String longitude = String(gps.location.lng(), 6);
+      lastLat = gps.location.lat();
+      lastLng = gps.location.lng();
 
       char timestamp[30];
       sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02d.000Z",
@@ -55,10 +76,12 @@ void loop() {
         gps.time.minute(),
         gps.time.second());
 
+      lastTime = timestamp;
+
       Serial.println("------------------------------------------------------");
-      Serial.print("Latitude: "); Serial.println(latitude);
-      Serial.print("Longitude: "); Serial.println(longitude);
-      Serial.print("Timestamp: "); Serial.println(timestamp);
+      Serial.print("Latitude: "); Serial.println(lastLat, 6);
+      Serial.print("Longitude: "); Serial.println(lastLng, 6);
+      Serial.print("Timestamp: "); Serial.println(lastTime);
       Serial.println("------------------------------------------------------");
 
       if (WiFi.status() == WL_CONNECTED) {
@@ -75,10 +98,10 @@ void loop() {
           Serial.println("ID not found. Creating new entry...");
           firebase.setString(idPath, DEVICE_ID);
         }
-        firebase.setFloat(basePath + "/position/lat", round(gps.location.lat() * 1000000.0) / 1000000.0);
-        firebase.setFloat(basePath + "/position/lng", round(gps.location.lng() * 1000000.0) / 1000000.0);
 
-        firebase.setString(basePath + "/timestamp", timestamp);
+        firebase.setFloat(basePath + "/position/lat", lastLat);
+        firebase.setFloat(basePath + "/position/lng", lastLng);
+        firebase.setString(basePath + "/timestamp", lastTime);
 
         Serial.println("Data pushed to Firebase");
       } else {
@@ -88,7 +111,6 @@ void loop() {
     }
   }
 }
-
 
 void Connect_WiFi() {
   Serial.println();
@@ -101,14 +123,12 @@ void Connect_WiFi() {
     Serial.println("-------------------------------------------------------");
     Serial.println("WiFi Not connected");
     Serial.println("-------------------------------------------------------");
-    
-  }else{
+  } else {
     Serial.println("-------------------------------------------------------");
     Serial.println("WiFi connected");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
     Serial.println("-------------------------------------------------------");
-
   }
   delay(3000);
 }
