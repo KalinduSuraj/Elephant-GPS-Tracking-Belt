@@ -5,25 +5,35 @@
 #include <SoftwareSerial.h>
 #include <ESP8266Firebase.h>
 
-#define WIFI_SSID "Suraj"
-#define WIFI_PASSWORD "11114444"
+#define WIFI_SSID "TCL20Y"
+#define WIFI_PASSWORD "F55BuIvV"
 
 #define FIREBASE_HOST "https://elephant-tracking-app-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 Firebase firebase(FIREBASE_HOST);
 TinyGPSPlus gps;
-SoftwareSerial gpsSerial(D2, D1);  // RX, TX
+SoftwareSerial gpsSerial(D4, D3);  // RX, TX
 
 unsigned long lastSent = 0;
-const unsigned long sendInterval = 5000;  // milliseconds
+const unsigned long sendInterval = 2000;  // milliseconds
 
 void setup() {
   Serial.begin(9600);
   gpsSerial.begin(9600);
-  Connect_WiFi();
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("- ");
+    delay(500);
+  }
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
 void loop() {
+  // Serial.println("-------------------------------------------------------- ");
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
   }
